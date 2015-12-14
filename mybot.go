@@ -26,10 +26,9 @@ THE SOFTWARE.
 package main
 
 import (
-	"encoding/csv"
 	"fmt"
+	"github.com/gocql/gocql"
 	"log"
-	"net/http"
 	"os"
 	"strings"
 )
@@ -39,6 +38,12 @@ func main() {
 		fmt.Fprintf(os.Stderr, "usage: mybot slack-bot-token\n")
 		os.Exit(1)
 	}
+
+	cluster := gocql.NewCluster("127.0.0.1")
+	cluster.Keyspace = "sailbot"
+	cluster.ProtoVersion = 0x3
+	session, _ := cluster.CreateSession()
+	defer session.Close()
 
 	// start a websocket-based Real Time API session
 	ws, id := slackConnect(os.Args[1])
@@ -55,10 +60,10 @@ func main() {
 		if m.Type == "message" && strings.HasPrefix(m.Text, "<@"+id+">") {
 			// if so try to parse if
 			parts := strings.Fields(m.Text)
-			if len(parts) == 3 && parts[1] == "stock" {
+			if len(parts) >= 3 && parts[1] == "define" {
 				// looks good, get the quote and reply with the result
 				go func(m Message) {
-					m.Text = getQuote(parts[2])
+					m.Text = getDefinition(session, parts[2:])
 					postMessage(ws, m)
 				}(m)
 				// NOTE: the Message object is copied, this is intentional
@@ -71,21 +76,12 @@ func main() {
 	}
 }
 
-// Get the quote via Yahoo. You should replace this method to something
-// relevant to your team!
-func getQuote(sym string) string {
-	sym = strings.ToUpper(sym)
-	url := fmt.Sprintf("http://download.finance.yahoo.com/d/quotes.csv?s=%s&f=nsl1op&e=.csv", sym)
-	resp, err := http.Get(url)
-	if err != nil {
-		return fmt.Sprintf("error: %v", err)
+func getDefinition(session *gocql.Session, words []string) string {
+	var defn string
+	thingtodefine := strings.ToLower(strings.Join(words, " "))
+	iter := session.Query("select defn from words where word = ?", thingtodefine).Consistency(gocql.One).Iter()
+	for iter.Scan(&defn) {
+		return fmt.Sprintf("'%s': %s", thingtodefine, defn)
 	}
-	rows, err := csv.NewReader(resp.Body).ReadAll()
-	if err != nil {
-		return fmt.Sprintf("error: %v", err)
-	}
-	if len(rows) >= 1 && len(rows[0]) == 5 {
-		return fmt.Sprintf("%s (%s) is trading at $%s", rows[0][0], rows[0][1], rows[0][2])
-	}
-	return fmt.Sprintf("unknown response format (symbol was \"%s\")", sym)
+	return fmt.Sprintf("Sorry I don't know about '%s'", thingtodefine)
 }
