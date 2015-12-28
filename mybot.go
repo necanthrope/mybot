@@ -39,11 +39,13 @@ func main() {
 		os.Exit(1)
 	}
 
-	cluster := gocql.NewCluster("127.0.0.1")
-	cluster.Keyspace = "sailbot"
-	cluster.ProtoVersion = 0x3
-	session, _ := cluster.CreateSession()
+	session := startup()
 	defer session.Close()
+	answers := lookup(session, "what's an anchor chain?")
+	if len(answers) != 1 {
+		fmt.Printf("%q", answers)
+		os.Exit(1)
+	}
 
 	// start a websocket-based Real Time API session
 	ws, id := slackConnect(os.Args[1])
@@ -59,12 +61,18 @@ func main() {
 		// see if we're mentioned
 		if m.Type == "message" && strings.HasPrefix(m.Text, "<@"+id+">") {
 			// if so try to parse if
-			parts := strings.Fields(m.Text)
-			if len(parts) >= 3 && parts[1] == "define" {
+			ans := lookup(session, m.Text)
+			if len(ans)>0 {
 				// looks good, get the quote and reply with the result
 				go func(m Message) {
-					m.Text = getDefinition(session, parts[2:])
-					postMessage(ws, m)
+					for _, def := range ans {
+						if len(def[1]) > 0 {
+							m.Text = "*" + def[0] + " " + def[1] + "*: " + def[2]
+						} else {
+							m.Text = "*" + def[0] + "*: " + def[2]
+						}
+						postMessage(ws, m)
+						}
 				}(m)
 				// NOTE: the Message object is copied, this is intentional
 			} else {
