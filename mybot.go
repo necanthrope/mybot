@@ -49,11 +49,11 @@ func parseCommandLine() (error, *Configuration) {
 	flag.StringVar( &result.slackToken, "slack-token", "", "slack token for this bot" )
 	flag.Parse()
 
-	if( flag.NArg() != 0 ){
+	if flag.NArg() != 0 {
 		flag.Usage()
-		return errors.New("Unkonwn arguments"), nil
+		return errors.New("Unknown arguments"), nil
 	}
-	if( result.slackToken == "" ){
+	if result.slackToken == "" {
 		return errors.New("slack-token is required"), nil
 	}
 
@@ -62,7 +62,7 @@ func parseCommandLine() (error, *Configuration) {
 
 func main() {
 	var cmdError, config = parseCommandLine()
-	if( cmdError != nil ){
+	if cmdError != nil {
 		fmt.Fprintf( os.Stderr, "Error configuring: %s\n", cmdError.Error() )
 		os.Exit(-1)
 	}
