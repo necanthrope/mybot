@@ -20,7 +20,9 @@ func normalize(input string) []string {
 	rval := make([]string, 0)
 	for _, v := range strings.Fields(input) {
 		v = strings.Map(filter, v)
-		rval = append(rval, v)
+		if ( v != "" ) {
+		    rval = append(rval, v)
+		}
 	}
 	return rval
 }

@@ -37,3 +37,16 @@ func getCandidates(session *gocql.Session, words []string) [][]string {
 	}
 	return rval
 }
+func getRandom(session *gocql.Session) [][]string {
+	var first, rest, defn string
+	rval := make([][]string, 0)
+	random, _ := gocql.RandomUUID()
+	iter := session.Query(`select first, rest, defn from defs where TOKEN(first) > TOKEN(?) limit 1`, random.String()).Consistency(gocql.One).Iter()
+	for iter.Scan(&first, &rest, &defn) {
+		rval = append(rval, []string{first, rest, defn})
+	}
+	if err := iter.Close(); err != nil {
+		log.Fatal(err)
+	}
+	return rval
+}
