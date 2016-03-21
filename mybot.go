@@ -30,9 +30,12 @@ import (
 	"flag"
 	"fmt"
 	"github.com/gocql/gocql"
+	"github.com/patrickmn/go-cache"
+	"golang.org/x/net/websocket"
 	"log"
 	"os"
 	"strings"
+	"time"
 )
 
 type Configuration struct {
@@ -67,6 +70,8 @@ func main() {
 		os.Exit(-1)
 	}
 
+	c := cache.New(3600*time.Minute, 30*time.Second)
+
 	session := startup( config.cassandra, config.cassandraKeyspace )
 	defer session.Close()
 	answers := lookup(session, "what's an anchor chain?")
@@ -77,7 +82,30 @@ func main() {
 
 	// start a websocket-based Real Time API session
 	ws, id := slackConnect( config.slackToken )
-	fmt.Println("mybot ready, ^C exits")
+	fmt.Printf("mybot ready, id = %s, ^C exits\n", id)
+
+	ticker := time.NewTicker(time.Hour * 24)
+	go func(session *gocql.Session, ws *websocket.Conn) {
+		var m Message
+		m.Type = "message"
+		m.Channel = "C03N4M0LK"
+		for _ = range ticker.C {
+			ans := getRandom(session)
+			for _, def := range ans {
+				if _, found := c.Get(def[0]); found {
+					continue
+				}
+				if len(def[1]) > 0 {
+					m.Text = "*" + def[0] + " " + def[1] + "*: " + def[2]
+				} else {
+					m.Text = "*" + def[0] + "*: " + def[2]
+				}
+				postMessage(ws, m)
+				fmt.Printf("send %s\n", m.Text)
+				c.Set(def[0], 0, cache.DefaultExpiration)
+			}
+		}
+	}(session, ws)
 
 	for {
 		// read each incoming message
@@ -86,27 +114,26 @@ func main() {
 			log.Fatal(err)
 		}
 
-		// see if we're mentioned
-		if m.Type == "message" && strings.HasPrefix(m.Text, "<@"+id+">") {
+		if m.Type == "message" {
 			// if so try to parse if
 			ans := lookup(session, m.Text)
-			if len(ans)>0 {
+			if len(ans) > 0 {
 				// looks good, get the quote and reply with the result
 				go func(m Message) {
 					for _, def := range ans {
+						if _, found := c.Get(def[0]); found {
+							continue
+						}
 						if len(def[1]) > 0 {
 							m.Text = "*" + def[0] + " " + def[1] + "*: " + def[2]
 						} else {
 							m.Text = "*" + def[0] + "*: " + def[2]
 						}
 						postMessage(ws, m)
-						}
+						c.Set(def[0], 0, cache.DefaultExpiration)
+					}
 				}(m)
 				// NOTE: the Message object is copied, this is intentional
-			} else {
-				// huh?
-				m.Text = fmt.Sprintf("sorry, that does not compute\n")
-				postMessage(ws, m)
 			}
 		}
 	}
