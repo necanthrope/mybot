@@ -26,6 +26,8 @@ THE SOFTWARE.
 package main
 
 import (
+	"errors"
+	"flag"
 	"fmt"
 	"github.com/gocql/gocql"
 	"github.com/patrickmn/go-cache"
@@ -36,15 +38,41 @@ import (
 	"time"
 )
 
+type Configuration struct {
+	cassandra string
+	cassandraKeyspace string
+	slackToken string
+}
+
+func parseCommandLine() (error, *Configuration) {
+	var result Configuration
+
+	flag.StringVar( &result.cassandra, "cassandra", "8.14.147.250", "A node in the cassandra cluster to attach to" )
+	flag.StringVar( &result.cassandraKeyspace, "cassandra-keyspace", "sailbot", "Cassandra keyspace to connect to" )
+	flag.StringVar( &result.slackToken, "slack-token", "", "slack token for this bot" )
+	flag.Parse()
+
+	if flag.NArg() != 0 {
+		flag.Usage()
+		return errors.New("Unknown arguments"), nil
+	}
+	if result.slackToken == "" {
+		return errors.New("slack-token is required"), nil
+	}
+
+	return nil, &result
+}
+
 func main() {
-	if len(os.Args) != 2 {
-		fmt.Fprintf(os.Stderr, "usage: mybot slack-bot-token\n")
-		os.Exit(1)
+	var cmdError, config = parseCommandLine()
+	if cmdError != nil {
+		fmt.Fprintf( os.Stderr, "Error configuring: %s\n", cmdError.Error() )
+		os.Exit(-1)
 	}
 
 	c := cache.New(3600*time.Minute, 30*time.Second)
 
-	session := startup()
+	session := startup( config.cassandra, config.cassandraKeyspace )
 	defer session.Close()
 	answers := lookup(session, "what's an anchor chain?")
 	if len(answers) != 1 {
@@ -53,7 +81,7 @@ func main() {
 	}
 
 	// start a websocket-based Real Time API session
-	ws, id := slackConnect(os.Args[1])
+	ws, id := slackConnect( config.slackToken )
 	fmt.Printf("mybot ready, id = %s, ^C exits\n", id)
 
 	ticker := time.NewTicker(time.Hour * 24)

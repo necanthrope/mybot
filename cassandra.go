@@ -7,9 +7,9 @@ import (
 	"os"
 )
 
-func startup() *gocql.Session {
-	cluster := gocql.NewCluster("8.14.147.250")
-	cluster.Keyspace = "sailbot"
+func startup( cassandraCluster string, keyspace string ) *gocql.Session {
+	cluster := gocql.NewCluster( cassandraCluster )
+	cluster.Keyspace = keyspace
 	// cluster.ProtoVersion = 0x3
 	session, _ := cluster.CreateSession()
 	if session == nil {
