@@ -92,6 +92,7 @@ type Message struct {
 	Type    string `json:"type"`
 	Channel string `json:"channel"`
 	Text    string `json:"text"`
+	User		string `json:"user"`
 }
 
 func getMessage(ws *websocket.Conn) (m Message, err error) {

@@ -88,7 +88,7 @@ func main() {
 	go func(session *gocql.Session, ws *websocket.Conn) {
 		var m Message
 		m.Type = "message"
-		m.Channel = "C03N4M0LK"
+		m.Channel = "C0J8YHNF6"
 		for _ = range ticker.C {
 			ans := getRandom(session)
 			for _, def := range ans {
@@ -115,6 +115,11 @@ func main() {
 		}
 
 		if m.Type == "message" {
+
+			if (m.User == id) {
+				continue
+			}
+
 			// if so try to parse if
 			ans := lookup(session, m.Text)
 			if len(ans) > 0 {
